@@ -36,6 +36,8 @@ frame = 0
 start_time = time.time()
 depth_buffer = []
 draw_order = []
+move_direction = [0, 0, 0]
+velocity = [0, 0, 0]
 
 class GameObject:
     def __init__(self, points, position, rotation, scale, color):
@@ -68,6 +70,38 @@ class Camera:
         camera_points = clip_points(camera_points, self.clipping_distance)
 
         return camera_points
+
+    def handle_input(self, keys):
+        ry = self.rotation[1] * (math.pi / 180)
+
+        if keys[pygame.key.key_code('r')] == True:
+            move_direction[1] = move_speed
+        elif keys[pygame.key.key_code('f')] == True:
+            move_direction[1] = -move_speed
+        else:
+            move_direction[1] = 0
+
+        if keys[pygame.key.key_code('q')] == True:
+            self.rotation[1] += turn_speed
+        elif keys[pygame.key.key_code('e')] == True:
+            self.rotation[1] -= turn_speed
+    
+        if keys[pygame.key.key_code('a')] == True:
+            move_direction[0] = math.cos(ry) * move_speed
+            move_direction[2] = math.sin(ry) * move_speed
+        elif keys[pygame.key.key_code('d')] == True:
+            move_direction[0] = -math.cos(ry) * move_speed
+            move_direction[2] = -math.sin(ry) * move_speed
+        elif keys[pygame.key.key_code('s')] == True:
+            move_direction[0] = -math.sin(ry) * move_speed
+            move_direction[2] = math.cos(ry) * move_speed
+        elif keys[pygame.key.key_code('w')] == True:
+            move_direction[0] = math.sin(ry) * move_speed
+            move_direction[2] = -math.cos(ry) * move_speed
+        else:
+            move_direction[0] = 0
+            move_direction[2] = 0
+
 
 cube_points = [
     [-50,-50,50],
@@ -119,33 +153,6 @@ def get_FPS():
     fps = int(frame / (time.time() - start_time))
     return fps
 
-def on_key_hold(keys, camera):
-    ry = camera.rotation[1] * (math.pi / 180)
-
-    if keys[pygame.key.key_code('r')] == True:
-        camera.position[1] += move_speed
-    if keys[pygame.key.key_code('f')] == True:
-        camera.position[1] -= move_speed
-        
-    if keys[pygame.key.key_code('q')] == True:
-        camera.rotation[1] += turn_speed
-    if keys[pygame.key.key_code('e')] == True:
-        camera.rotation[1] -= turn_speed
-        
-    if keys[pygame.key.key_code('a')] == True:
-        camera.position[0] += math.cos(ry) * move_speed
-        camera.position[2] += math.sin(ry) * move_speed
-    if keys[pygame.key.key_code('d')] == True:
-        camera.position[0] -= math.cos(ry) * move_speed
-        camera.position[2] -= math.sin(ry) * move_speed
-        
-    if keys[pygame.key.key_code('s')] == True:
-        camera.position[0] -= math.sin(ry) * move_speed
-        camera.position[2] += math.cos(ry) * move_speed
-    if keys[pygame.key.key_code('w')] == True:
-        camera.position[0] += math.sin(ry) * move_speed
-        camera.position[2] -= math.cos(ry) * move_speed
-    
 def render_object(objectID):
     color = objects[objectID].color
     transformed_points = objects[objectID].get_transformed_points(player_camera.position)
@@ -217,7 +224,18 @@ def initialize():
     for i in range(len(objects)):
         depth_buffer.append([i, 100])
         render_object(i)
+
+def physicstest():
+    camY = player_camera.position[1]
     
+    velocity[0] += move_direction[0]
+    velocity[1] += move_direction[1]
+    velocity[2] += move_direction[2]
+
+    player_camera.position[0] += velocity[0]
+    player_camera.position[1] += velocity[1]
+    player_camera.position[2] += velocity[2]
+
 while running:
     on_step() #main loop
 
@@ -225,7 +243,9 @@ while running:
         if event.type == pygame.QUIT:
             running = False
 
-    on_key_hold(pygame.key.get_pressed(), player_camera) #get input with respect to the camera
+    player_camera.handle_input(pygame.key.get_pressed()) #give input to camera
+
+    physicstest()
 
     pygame.display.flip() #render everything
     clock.tick(target_fps) #60 fps
