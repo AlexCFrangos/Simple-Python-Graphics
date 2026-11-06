@@ -3,6 +3,14 @@ import time
 
 import pygame
 
+from graphics_functions import (
+    clip_points,
+    project_points,
+    rotate_points,
+    scale_points,
+    transform_points,
+)
+
 pygame.init()
 
 
@@ -21,17 +29,45 @@ running = True
 system_font = pygame.font.SysFont("Times New Roman", 12)
 
 #rendering variables
-focal_length = 300
 move_speed = 10
 turn_speed = 1
-target_transform = [0, 0, 0]
-target_rotation = [0, 0, 0]
 
-clipping_distance = 0.1
 frame = 0
 start_time = time.time()
 depth_buffer = []
 draw_order = []
+
+class GameObject:
+    def __init__(self, points, position, rotation, scale, color):
+        self.points = points
+        self.position = position
+        self.rotation = rotation
+        self.scale = scale
+        self.color = color
+
+    def get_transformed_points(self, target_transform):
+        points = scale_points(self.points, self.scale)
+        points = rotate_points(points, self.rotation)
+        points = transform_points(points, [
+        target_transform[0] + self.position[0],
+        target_transform[1] + self.position[1],
+        target_transform[2] + self.position[2]
+        ])
+
+        return points
+
+class Camera:
+    def __init__(self, position, rotation, clipping_distance, focal_length):
+        self.position = position
+        self.rotation = rotation
+        self.clipping_distance = clipping_distance
+        self.focal_length = focal_length
+
+    def get_camera_points(self, points):
+        camera_points = rotate_points(points, self.rotation)
+        camera_points = clip_points(camera_points, self.clipping_distance)
+
+        return camera_points
 
 cube_points = [
     [-50,-50,50],
@@ -57,193 +93,70 @@ triangle_points = [
     [50,50,0]
 ]
 
-#point data, position, color
+#point data, position, rotation, scale, color
 objects = [
-    [triangle_points, (0,0,1000), (155,155,155), (45,0,0), (1,1,1)],
-    [triangle_points, (100,0,1000), (155,155,155), (0,45,0), (1,1,1)],
-    [triangle_points, (200,0,1000), (155,155,155), (0,0,45), (1,1,1)],
+    GameObject(triangle_points, (0,0,1000), (45,0,0), (1,1,1), (155,155,155)),
+    GameObject(triangle_points, (100,0,1000), (0,45,0), (1,1,1), (155,155,155)),
+    GameObject(triangle_points, (200,0,1000), (0,0,45), (1,1,1), (155,155,155)),
 
-    [plane_points, (0,0,250), (155,0,0), (0,0,0), (1,1,1)],
-    
-    [plane_points, (100,0,250), (0,155,0), (0,0,0), (1,1,1)],
-    [plane_points, (200,0,250), (0,0,155), (0,0,0), (1,1,1)],
-    [plane_points, (0,0,500), (65,50,0), (0,0,0), (1,1,1)],
-    [plane_points, (100,0,500), (50,175,80), (0,0,0), (1,1,1)],
-    [plane_points, (200,0,500), (0,100,200), (0,0,0), (1,1,1)],
-    [plane_points, (0,0,750), (155,155,155), (0,0,0), (1,1,1)],
-    [plane_points, (100,0,750), (155,155,155), (0,0,0), (1,1,1)],
-    [plane_points, (200,0,750), (155,155,155), (0,0,0), (1,1,1)],
-     
-    [plane_points, [0,-50,0], (155,155,155), (45,0,0), (5,5,1)]
+    GameObject(plane_points, (0,0,250), (0,0,0), (1,1,1), (155,0,0)),
 
+    GameObject(plane_points, (100,0,250), (0,0,0), (1,1,1), (0,155,0)),
+    GameObject(plane_points, (200,0,250), (0,0,0), (1,1,1), (0,0,155)),
+    GameObject(plane_points, (0,0,500), (0,0,0), (1,1,1), (65,50,0)),
+    GameObject(plane_points, (100,0,500), (0,0,0), (1,1,1), (50,175,80)),
+    GameObject(plane_points, (200,0,500), (0,0,0), (1,1,1), (0,100,200)),
+    GameObject(plane_points, (0,0,750), (0,0,0), (1,1,1), (155,155,155)),
+    GameObject(plane_points, (100,0,750), (0,0,0), (1,1,1), (155,155,155)),
+    GameObject(plane_points, (200,0,750), (0,0,0), (1,1,1), (155,155,155)),
+
+    GameObject(plane_points, [0,-50,0], (45,0,0), (5,5,1), (155,155,155))
 ]
+
+player_camera = Camera([0,0,0], [0,0,0], 1, 300)
 
 def get_FPS():
     fps = int(frame / (time.time() - start_time))
     return fps
-        
-def on_key_hold(keys):
-    ry = target_rotation[1] * (math.pi / 180)
+
+def on_key_hold(keys, camera):
+    ry = camera.rotation[1] * (math.pi / 180)
 
     if keys[pygame.key.key_code('r')] == True:
-        target_transform[1] += move_speed
+        camera.position[1] += move_speed
     if keys[pygame.key.key_code('f')] == True:
-        target_transform[1] -= move_speed
+        camera.position[1] -= move_speed
         
     if keys[pygame.key.key_code('q')] == True:
-        target_rotation[1] += turn_speed
+        camera.rotation[1] += turn_speed
     if keys[pygame.key.key_code('e')] == True:
-        target_rotation[1] -= turn_speed
+        camera.rotation[1] -= turn_speed
         
     if keys[pygame.key.key_code('a')] == True:
-        target_transform[0] += math.cos(ry) * move_speed
-        target_transform[2] += math.sin(ry) * move_speed
+        camera.position[0] += math.cos(ry) * move_speed
+        camera.position[2] += math.sin(ry) * move_speed
     if keys[pygame.key.key_code('d')] == True:
-        target_transform[0] -= math.cos(ry) * move_speed
-        target_transform[2] -= math.sin(ry) * move_speed
+        camera.position[0] -= math.cos(ry) * move_speed
+        camera.position[2] -= math.sin(ry) * move_speed
         
     if keys[pygame.key.key_code('s')] == True:
-        target_transform[0] -= math.sin(ry) * move_speed
-        target_transform[2] += math.cos(ry) * move_speed
+        camera.position[0] -= math.sin(ry) * move_speed
+        camera.position[2] += math.cos(ry) * move_speed
     if keys[pygame.key.key_code('w')] == True:
-        target_transform[0] += math.sin(ry) * move_speed
-        target_transform[2] -= math.cos(ry) * move_speed
-
-def rotate_points(points, rotation):
-    
-    rotated_points = []
-    rx = rotation[0] * (math.pi / 180)
-    ry = rotation[1] * (math.pi / 180)
-    rz = rotation[2] * (math.pi / 180)
-    
-    for x, y, z in points:
-        #rotate x
-        x1 = x
-        y1 = y * math.cos(rx) - z * math.sin(rx)
-        z1 = y * math.sin(rx) + z * math.cos(rx)
-
-        #rotate y
-        x2 = z1 * math.sin(ry) + x1 * math.cos(ry)
-        y2 = y1
-        z2 = z1 * math.cos(ry) - x1 * math.sin(ry)
-
-        #rotate z
-        x3 = x2 * math.cos(rz) - y2 * math.sin(rz)
-        y3 = x2 * math.sin(rz) + y2 * math.cos(rz)
-        z3 = z2
-        
-        rotated_points.append([x3, y3, z3])
-        
-    return rotated_points
-
-def transform_points(points, transform):
-    
-    transformed_points = []
-    tx, ty, tz = transform
-    
-    for point in points:
-        x, y, z = point
-        
-        transformed_points.append(
-            [
-                x + tx,
-                y + ty,
-                z + tz
-            ]
-        )
-        
-    return transformed_points
-
-def scale_points(points, scale):
-    
-    scaled_points = []
-    sx, sy, sz = scale
-    
-    for point in points:
-        x, y, z = point
-
-        scaled_points.append(
-            [
-                x * sx,
-                y * sy,
-                z * sz
-            ]
-        )
-        
-    return scaled_points
-
-def clip_points(points, distance):
-    clipped_points = []
-    previous = points[-1]
-
-    for current in points:
-        current_clipped = current[2] < distance
-        previous_clipped = previous[2] < distance
-
-        #calculate intersection point if two points cross clipping distance
-        if current_clipped != previous_clipped:
-
-            interpolant = (distance - previous[2]) / (current[2] - previous[2])
-
-            intersection = [
-                previous[0] + (current[0] - previous[0]) * interpolant,
-                previous[1] + (current[1] - previous[1]) * interpolant,
-                previous[2] + (current[2] - previous[2]) * interpolant
-            ]
-
-            clipped_points.append(intersection)
-
-        if not current_clipped:
-            clipped_points.append(current)
-
-        previous = current
-
-    return clipped_points
-
-def project_points(points):
-    
-    flat_points = []
-    for point in points:
-        x, y, z = point
-
-        fx = focal_length * (x / z) + (screen_size[0] / 2)
-        fy = focal_length * (y / z) + (screen_size[1] / 2)
-
-        flat_points.append([fx, fy])
-    
-    return flat_points
+        camera.position[0] += math.sin(ry) * move_speed
+        camera.position[2] -= math.cos(ry) * move_speed
     
 def render_object(objectID):
-    points = objects[objectID][0]
-    position = objects[objectID][1]
-    color = objects[objectID][2]
-    object_rotation = objects[objectID][3]
-    scale = objects[objectID][4]
+    color = objects[objectID].color
+    transformed_points = objects[objectID].get_transformed_points(player_camera.position)
 
-    #scales object
-    scaled_points = scale_points(points, scale)
-    
-    #rotates the object around its own axis
-    locally_rotated_points = rotate_points(scaled_points, object_rotation)
+    camera_points = player_camera.get_camera_points(transformed_points)
 
-    #transform points to desired position
-    transformed_points = transform_points(locally_rotated_points, [
-        target_transform[0] + position[0],
-        target_transform[1] + position[1],
-        target_transform[2] + position[2]
-        ])
-
-    #rotate around camera
-    rotated_points = rotate_points(transformed_points, target_rotation)
-
-    #clip points near the camera
-    clipped_points = clip_points(rotated_points, clipping_distance)
-
-    if not clipped_points:
+    if not camera_points:
         return
 
     #project onto 2D screen
-    flat_points = project_points(clipped_points)
+    flat_points = project_points(camera_points, player_camera.focal_length, screen_size)
 
     if not flat_points:
         return
@@ -259,7 +172,7 @@ def render_object(objectID):
 
     z_values = []
 
-    for point in clipped_points:
+    for point in camera_points:
         z_values.append(point[2])
     
     
@@ -288,7 +201,8 @@ def on_step():
     screen.blit(system_font.render(f"FPS: {get_FPS()}", True, (255, 255, 255)), (20, 20))
     screen.blit(system_font.render(f"Frame: {frame}", True, (255, 255, 255)), (20, 40))
     screen.blit(system_font.render(f"Objects: {len(depth_buffer)}", True, (255, 255, 255)), (20, 60))
-    screen.blit(system_font.render(f"Position: {int(target_transform[0]), int(target_transform[1]), int(target_transform[2])}", True, (255, 255, 255)), (20, 80))
+    screen.blit(system_font.render(f"Position: {int(player_camera.position[0]), int(player_camera.position[1]), int(player_camera.position[2])}",
+                                    True, (255, 255, 255)), (20, 80))
     
     frame += 1
     
@@ -311,7 +225,7 @@ while running:
         if event.type == pygame.QUIT:
             running = False
 
-    on_key_hold(pygame.key.get_pressed()) #get input
+    on_key_hold(pygame.key.get_pressed(), player_camera) #get input with respect to the camera
 
     pygame.display.flip() #render everything
     clock.tick(target_fps) #60 fps
