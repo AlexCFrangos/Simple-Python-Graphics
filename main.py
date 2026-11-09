@@ -1,6 +1,7 @@
 import math
 import time
 
+import numpy
 import pygame
 
 from graphics_functions import (
@@ -8,7 +9,6 @@ from graphics_functions import (
     project_points,
     rotate_points,
     scale_points,
-    transform_points,
 )
 
 pygame.init()
@@ -29,15 +29,12 @@ running = True
 system_font = pygame.font.SysFont("Times New Roman", 12)
 
 #rendering variables
-move_speed = 10
-turn_speed = 1
+gravity = 0.5
 
 frame = 0
 start_time = time.time()
 depth_buffer = []
 draw_order = []
-move_direction = [0, 0, 0]
-velocity = [0, 0, 0]
 
 class GameObject:
     def __init__(self, points, position, rotation, scale, color):
@@ -47,16 +44,13 @@ class GameObject:
         self.scale = scale
         self.color = color
 
-    def get_transformed_points(self, target_transform):
+    def get_transformed_points(self, camera_position):
         points = scale_points(self.points, self.scale)
         points = rotate_points(points, self.rotation)
-        points = transform_points(points, [
-        target_transform[0] + self.position[0],
-        target_transform[1] + self.position[1],
-        target_transform[2] + self.position[2]
-        ])
+        points = numpy.add(points, numpy.subtract(
+        self.position, camera_position))
 
-        return points
+        return list(-numpy.array(points))
 
 class Camera:
     def __init__(self, position, rotation, clipping_distance, focal_length):
@@ -64,6 +58,12 @@ class Camera:
         self.rotation = rotation
         self.clipping_distance = clipping_distance
         self.focal_length = focal_length
+        self.jumping = False
+        self.jump_power = 10
+        self.move_speed = 0.5
+        self.turn_speed = 1
+        self.move_direction = [0, 0, 0]
+        self.velocity = [0, 0, 0]
 
     def get_camera_points(self, points):
         camera_points = rotate_points(points, self.rotation)
@@ -71,37 +71,37 @@ class Camera:
 
         return camera_points
 
-    def handle_input(self, keys):
+    def handle_input(self, keys, mouse_pos):
         ry = self.rotation[1] * (math.pi / 180)
+        sensitivity = 0.1
 
-        if keys[pygame.key.key_code('r')] == True:
-            move_direction[1] = move_speed
-        elif keys[pygame.key.key_code('f')] == True:
-            move_direction[1] = -move_speed
-        else:
-            move_direction[1] = 0
+        self.rotation[1] -= mouse_pos[0] * sensitivity
 
-        if keys[pygame.key.key_code('q')] == True:
-            self.rotation[1] += turn_speed
-        elif keys[pygame.key.key_code('e')] == True:
-            self.rotation[1] -= turn_speed
+        if keys[pygame.key.key_code('space')] == True and not self.jumping:
+            self.jumping = True
+            self.velocity[1] = self.jump_power
     
         if keys[pygame.key.key_code('a')] == True:
-            move_direction[0] = math.cos(ry) * move_speed
-            move_direction[2] = math.sin(ry) * move_speed
+            self.move_direction[0] = math.cos(ry) * self.move_speed
+            self.move_direction[2] = math.sin(ry) * self.move_speed
         elif keys[pygame.key.key_code('d')] == True:
-            move_direction[0] = -math.cos(ry) * move_speed
-            move_direction[2] = -math.sin(ry) * move_speed
+            self.move_direction[0] = -math.cos(ry) * self.move_speed
+            self.move_direction[2] = -math.sin(ry) * self.move_speed
         elif keys[pygame.key.key_code('s')] == True:
-            move_direction[0] = -math.sin(ry) * move_speed
-            move_direction[2] = math.cos(ry) * move_speed
+            self.move_direction[0] = -math.sin(ry) * self.move_speed
+            self.move_direction[2] = math.cos(ry) * self.move_speed
         elif keys[pygame.key.key_code('w')] == True:
-            move_direction[0] = math.sin(ry) * move_speed
-            move_direction[2] = -math.cos(ry) * move_speed
+            self.move_direction[0] = math.sin(ry) * self.move_speed
+            self.move_direction[2] = -math.cos(ry) * self.move_speed
         else:
-            move_direction[0] = 0
-            move_direction[2] = 0
+            self.move_direction[0] = 0
+            self.move_direction[2] = 0
 
+triangle_points = [
+    [-50,-50,0],
+    [-50,50,0],
+    [50,-50,0]
+]
 
 cube_points = [
     [-50,-50,50],
@@ -121,20 +121,12 @@ plane_points = [
     [-50,50,0]
 ]
 
-triangle_points = [
-    [-50,50,0],
-    [0,-50,0],
-    [50,50,0]
-]
-
-#point data, position, rotation, scale, color
 objects = [
     GameObject(triangle_points, (0,0,1000), (45,0,0), (1,1,1), (155,155,155)),
     GameObject(triangle_points, (100,0,1000), (0,45,0), (1,1,1), (155,155,155)),
     GameObject(triangle_points, (200,0,1000), (0,0,45), (1,1,1), (155,155,155)),
 
     GameObject(plane_points, (0,0,250), (0,0,0), (1,1,1), (155,0,0)),
-
     GameObject(plane_points, (100,0,250), (0,0,0), (1,1,1), (0,155,0)),
     GameObject(plane_points, (200,0,250), (0,0,0), (1,1,1), (0,0,155)),
     GameObject(plane_points, (0,0,500), (0,0,0), (1,1,1), (65,50,0)),
@@ -144,10 +136,11 @@ objects = [
     GameObject(plane_points, (100,0,750), (0,0,0), (1,1,1), (155,155,155)),
     GameObject(plane_points, (200,0,750), (0,0,0), (1,1,1), (155,155,155)),
 
-    GameObject(plane_points, [0,-50,0], (45,0,0), (5,5,1), (155,155,155))
+    GameObject(triangle_points, [0,0,-200], (-45,0,0), (5,5,5), (100,155,155)),
+    GameObject(triangle_points, [0,0,-200], (45,0,180), (5,5,5), (155,155,100))
 ]
 
-player_camera = Camera([0,0,0], [0,0,0], 1, 300)
+player_camera = Camera([0,0,-200], [0,180,0], 10, 300)
 
 def get_FPS():
     fps = int(frame / (time.time() - start_time))
@@ -225,27 +218,37 @@ def initialize():
         depth_buffer.append([i, 100])
         render_object(i)
 
-def physicstest():
-    camY = player_camera.position[1]
-    
-    velocity[0] += move_direction[0]
-    velocity[1] += move_direction[1]
-    velocity[2] += move_direction[2]
+def apply_physics():
+    #add input to velcity, cap with increasing velocity
+    player_camera.velocity[0] += player_camera.move_direction[0] - player_camera.velocity[0]/10
+    player_camera.velocity[2] += player_camera.move_direction[2] - player_camera.velocity[2]/10
 
-    player_camera.position[0] += velocity[0]
-    player_camera.position[1] += velocity[1]
-    player_camera.position[2] += velocity[2]
+    player_camera.position = numpy.add(player_camera.position, player_camera.velocity)
+
+    if player_camera.jumping and player_camera.position[1] > 0:
+        player_camera.velocity[1] -= gravity
+    else:
+        player_camera.jumping = False
+        player_camera.position[1] = 0
+        player_camera.velocity[1] = 0
+
+    player_camera.position[1] = max(player_camera.position[1], 0)
 
 while running:
-    on_step() #main loop
-
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
+    
+    on_step()
 
-    player_camera.handle_input(pygame.key.get_pressed()) #give input to camera
+    pygame.mouse.set_pos(screen_size[0]/2, screen_size[1]/2)
+    player_camera.handle_input(pygame.key.get_pressed(), pygame.mouse.get_rel())
 
-    physicstest()
+    apply_physics()
 
-    pygame.display.flip() #render everything
-    clock.tick(target_fps) #60 fps
+    pygame.display.flip()
+    clock.tick(target_fps)
+
+    if pygame.key.get_pressed()[pygame.key.key_code('escape')] == True:
+        running = False
+        pygame.quit()

@@ -28,24 +28,6 @@ def rotate_points(points, rotation):
         
     return rotated_points
 
-def transform_points(points, transform):
-    
-    transformed_points = []
-    tx, ty, tz = transform
-    
-    for point in points:
-        x, y, z = point
-        
-        transformed_points.append(
-            [
-                x + tx,
-                y + ty,
-                z + tz
-            ]
-        )
-        
-    return transformed_points
-
 def scale_points(points, scale):
     
     scaled_points = []
@@ -64,18 +46,18 @@ def scale_points(points, scale):
         
     return scaled_points
 
-def clip_points(points, distance):
+def clip_points(points, near):
     clipped_points = []
     previous = points[-1]
 
     for current in points:
-        current_clipped = current[2] < distance
-        previous_clipped = previous[2] < distance
+        current_clipped = current[2] < near
+        previous_clipped = previous[2] < near
 
         #calculate intersection point if two points cross clipping distance
         if current_clipped != previous_clipped:
 
-            interpolant = (distance - previous[2]) / (current[2] - previous[2])
+            interpolant = (near - previous[2]) / (current[2] - previous[2])
 
             intersection = [
                 previous[0] + (current[0] - previous[0]) * interpolant,
@@ -95,11 +77,15 @@ def clip_points(points, distance):
 def project_points(points, focal_length, screen_size):
     
     flat_points = []
-    for point in points:
-        x, y, z = point
+    for x, y, z in points:
+        if z <= 0:
+            return
 
         fx = focal_length * (x / z) + (screen_size[0] / 2)
         fy = focal_length * (y / z) + (screen_size[1] / 2)
+
+        if fx > 10000000 or fx < -10000000 or fy > 10000000 or fx < -10000000:
+            return
 
         flat_points.append([fx, fy])
     
