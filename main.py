@@ -35,6 +35,7 @@ frame = 0
 start_time = time.time()
 depth_buffer = []
 draw_order = []
+mouse_locked = False
 
 class GameObject:
     def __init__(self, points, position, rotation, scale, color):
@@ -60,6 +61,8 @@ class Camera:
         self.focal_length = focal_length
         self.jumping = False
         self.jump_power = 10
+        self.horizontal_input = 0
+        self.vertical_input = 0
         self.move_speed = 0.5
         self.turn_speed = 1
         self.move_direction = [0, 0, 0]
@@ -75,27 +78,35 @@ class Camera:
         ry = self.rotation[1] * (math.pi / 180)
         sensitivity = 0.1
 
-        self.rotation[1] -= mouse_pos[0] * sensitivity
+        if mouse_locked:
+            self.rotation[1] -= mouse_pos[0] * sensitivity
 
         if keys[pygame.key.key_code('space')] == True and not self.jumping:
             self.jumping = True
             self.velocity[1] = self.jump_power
     
         if keys[pygame.key.key_code('a')] == True:
-            self.move_direction[0] = math.cos(ry) * self.move_speed
-            self.move_direction[2] = math.sin(ry) * self.move_speed
+            self.horizontal_input = 1
         elif keys[pygame.key.key_code('d')] == True:
-            self.move_direction[0] = -math.cos(ry) * self.move_speed
-            self.move_direction[2] = -math.sin(ry) * self.move_speed
-        elif keys[pygame.key.key_code('s')] == True:
-            self.move_direction[0] = -math.sin(ry) * self.move_speed
-            self.move_direction[2] = math.cos(ry) * self.move_speed
-        elif keys[pygame.key.key_code('w')] == True:
-            self.move_direction[0] = math.sin(ry) * self.move_speed
-            self.move_direction[2] = -math.cos(ry) * self.move_speed
+            self.horizontal_input = -1
         else:
-            self.move_direction[0] = 0
-            self.move_direction[2] = 0
+            self.horizontal_input = 0
+
+        if keys[pygame.key.key_code('w')] == True:
+            self.vertical_input = 1
+        elif keys[pygame.key.key_code('s')] == True:
+            self.vertical_input = -1
+        else:
+            self.vertical_input = 0
+
+        self.move_direction[0] = (
+            (self.horizontal_input * math.cos(ry) * self.move_speed)**2
+            + (self.vertical_input * math.sin(ry) * self.move_speed)**2
+        )**0.5 * -math.tan
+        self.move_direction[2] = (
+            (self.horizontal_input * math.sin(ry) * self.move_speed)**2
+            + (self.vertical_input * -math.cos(ry) * self.move_speed)**2
+        )**0.5
 
 triangle_points = [
     [-50,-50,0],
@@ -241,14 +252,24 @@ while running:
     
     on_step()
 
-    pygame.mouse.set_pos(screen_size[0]/2, screen_size[1]/2)
     player_camera.handle_input(pygame.key.get_pressed(), pygame.mouse.get_rel())
 
+    if mouse_locked:
+        pygame.mouse.set_pos(screen_size[0]/2, screen_size[1]/2)
+        pygame.event.set_grab(True)
+        pygame.mouse.set_visible(False)
+        pygame.mouse.set_relative_mode(True)
+    else:
+        pygame.event.set_grab(False)
+        pygame.mouse.set_visible(True)
+        pygame.mouse.set_relative_mode(False)
+    
     apply_physics()
 
     pygame.display.flip()
     clock.tick(target_fps)
 
     if pygame.key.get_pressed()[pygame.key.key_code('escape')] == True:
-        running = False
-        pygame.quit()
+        mouse_locked = False
+    if pygame.mouse.get_pressed(num_buttons=3)[0] == True:
+        mouse_locked = True
