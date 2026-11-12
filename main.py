@@ -63,9 +63,11 @@ class Camera:
         self.jump_power = 10
         self.horizontal_input = 0
         self.vertical_input = 0
-        self.move_speed = 0.5
+        self.move_speed = 0.25
         self.turn_speed = 1
         self.move_direction = [0, 0, 0]
+        self.orientation_forward = [0, 0, 0]
+        self.orientation_right = [0, 0, 0]
         self.velocity = [0, 0, 0]
 
     def get_camera_points(self, points):
@@ -99,14 +101,18 @@ class Camera:
         else:
             self.vertical_input = 0
 
-        self.move_direction[0] = (
-            (self.horizontal_input * math.cos(ry) * self.move_speed)**2
-            + (self.vertical_input * math.sin(ry) * self.move_speed)**2
-        )**0.5 * -math.tan
-        self.move_direction[2] = (
-            (self.horizontal_input * math.sin(ry) * self.move_speed)**2
-            + (self.vertical_input * -math.cos(ry) * self.move_speed)**2
-        )**0.5
+        self.orientation_forward = [math.sin(ry), 0, -math.cos(ry)]
+        self.orientation_right = [math.cos(ry), 0, math.sin(ry)]
+
+        raw_direction = numpy.add(
+            numpy.multiply(self.orientation_forward, self.vertical_input * self.move_speed),
+            numpy.multiply(self.orientation_right, self.horizontal_input * self.move_speed)
+        )
+
+        if numpy.linalg.norm(raw_direction) != 0:
+            self.move_direction = raw_direction / numpy.linalg.norm(raw_direction)
+        else:
+            self.move_direction = raw_direction
 
 triangle_points = [
     [-50,-50,0],
@@ -208,13 +214,7 @@ def on_step():
     if frame == 0:
         initialize()
 
-    #debug information
-    screen.blit(system_font.render(f"FPS: {get_FPS()}", True, (255, 255, 255)), (20, 20))
-    screen.blit(system_font.render(f"Frame: {frame}", True, (255, 255, 255)), (20, 40))
-    screen.blit(system_font.render(f"Objects: {len(depth_buffer)}", True, (255, 255, 255)), (20, 60))
-    screen.blit(system_font.render(f"Position: {int(player_camera.position[0]), int(player_camera.position[1]), int(player_camera.position[2])}",
-                                    True, (255, 255, 255)), (20, 80))
-    
+
     frame += 1
     
     draw_order = list(depth_buffer)
@@ -223,6 +223,17 @@ def on_step():
 
     for obj in draw_order:
         render_object(obj[0])
+
+    #debug information
+    screen.blit(system_font.render(f"FPS: {get_FPS()}", True, (255, 255, 255)), (20, 20))
+    screen.blit(system_font.render(f"Frame: {frame}", True, (255, 255, 255)), (20, 40))
+    screen.blit(system_font.render(f"Objects: {len(depth_buffer)}", True, (255, 255, 255)), (20, 60))
+    screen.blit(system_font.render(f"Position: {
+        int(player_camera.position[0]),
+        int(player_camera.position[1]),
+        int(player_camera.position[2])
+        }",
+        True, (255, 255, 255)), (20, 80))
     
 def initialize():
     for i in range(len(objects)):
