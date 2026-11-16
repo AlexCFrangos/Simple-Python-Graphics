@@ -4,6 +4,8 @@ import time
 import numpy
 import pygame
 
+import logging
+
 from graphics_functions import (
     clip_points,
     project_points,
@@ -27,6 +29,14 @@ clock = pygame.time.Clock()
 running = True
 
 system_font = pygame.font.SysFont("Times New Roman", 12)
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(
+    filename="main_logfie.log",
+    level=logging.INFO,
+    format="%(asctime)s:%(levelname)s:%(message)s",
+    filemode="w"
+)
 
 #rendering variables
 gravity = 0.5
@@ -59,16 +69,18 @@ class Camera:
         self.rotation = rotation
         self.clipping_distance = clipping_distance
         self.focal_length = focal_length
+        self.grounded = False
         self.jumping = False
         self.jump_power = 10
         self.horizontal_input = 0
         self.vertical_input = 0
         self.move_speed = 0.25
-        self.turn_speed = 1
+        self.sensitivity = 0.25
         self.move_direction = [0, 0, 0]
         self.orientation_forward = [0, 0, 0]
         self.orientation_right = [0, 0, 0]
         self.velocity = [0, 0, 0]
+        self.linear_damping = 0
 
     def get_camera_points(self, points):
         camera_points = rotate_points(points, self.rotation)
@@ -78,28 +90,30 @@ class Camera:
 
     def handle_input(self, keys, mouse_pos):
         ry = self.rotation[1] * (math.pi / 180)
-        sensitivity = 0.1
 
         if mouse_locked:
-            self.rotation[1] -= mouse_pos[0] * sensitivity
+            self.rotation[1] -= mouse_pos[0] * self.sensitivity
 
         if keys[pygame.key.key_code('space')] == True and not self.jumping:
             self.jumping = True
             self.velocity[1] = self.jump_power
-    
-        if keys[pygame.key.key_code('a')] == True:
-            self.horizontal_input = 1
-        elif keys[pygame.key.key_code('d')] == True:
-            self.horizontal_input = -1
-        else:
-            self.horizontal_input = 0
 
-        if keys[pygame.key.key_code('w')] == True:
-            self.vertical_input = 1
-        elif keys[pygame.key.key_code('s')] == True:
-            self.vertical_input = -1
+        if self.grounded:
+            if keys[pygame.key.key_code('a')] == True:
+                self.horizontal_input = 1
+            elif keys[pygame.key.key_code('d')] == True:
+                self.horizontal_input = -1
+            else:
+                self.horizontal_input = 0
+
+            if keys[pygame.key.key_code('w')] == True:
+                self.vertical_input = 1
+            elif keys[pygame.key.key_code('s')] == True:
+                self.vertical_input = -1
+            else:
+                self.vertical_input = 0
         else:
-            self.vertical_input = 0
+            self.horizontal_input, self.vertical_input = 0, 0
 
         self.orientation_forward = [math.sin(ry), 0, -math.cos(ry)]
         self.orientation_right = [math.cos(ry), 0, math.sin(ry)]
@@ -241,19 +255,32 @@ def initialize():
         render_object(i)
 
 def apply_physics():
+    last_friction = player_camera.linear_damping
+
+    if player_camera.grounded:
+        player_camera.linear_damping = 0.1
+    else:
+        player_camera.linear_damping = 0
+
+    if last_friction != player_camera.linear_damping:
+        logger.info("changing friction!")
+
     #add input to velcity, cap with increasing velocity
-    player_camera.velocity[0] += player_camera.move_direction[0] - player_camera.velocity[0]/10
-    player_camera.velocity[2] += player_camera.move_direction[2] - player_camera.velocity[2]/10
+    player_camera.velocity[0] += player_camera.move_direction[0] - player_camera.velocity[0] * player_camera.linear_damping
+    player_camera.velocity[2] += player_camera.move_direction[2] - player_camera.velocity[2] * player_camera.linear_damping
 
     player_camera.position = numpy.add(player_camera.position, player_camera.velocity)
 
     if player_camera.jumping and player_camera.position[1] > 0:
         player_camera.velocity[1] -= gravity
+        player_camera.grounded = False
     else:
         player_camera.jumping = False
+        player_camera.grounded = True
         player_camera.position[1] = 0
         player_camera.velocity[1] = 0
 
+    
     player_camera.position[1] = max(player_camera.position[1], 0)
 
 while running:
