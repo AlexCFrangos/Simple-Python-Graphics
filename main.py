@@ -46,14 +46,28 @@ start_time = time.time()
 depth_buffer = []
 draw_order = []
 mouse_locked = False
+render_objects = []
 
 class GameObject:
-    def __init__(self, points, position, rotation, scale, color):
-        self.points = points
+    def __init__(self, type, position, rotation, scale, color):
+        self.type = type
         self.position = position
         self.rotation = rotation
         self.scale = scale
         self.color = color
+        if self.type == 'plane':
+            render_objects.append(
+                GameObject('triangle', position, rotation, scale, color)
+            )
+            render_objects.append(    
+                GameObject('planehalf', position, rotation, scale, color)
+            )
+        elif self.type == 'planehalf':
+            self.points = -numpy.array(triangle_points)
+        elif self.type == 'triangle':
+            self.points = triangle_points
+            render_objects.append(self)
+
 
     def get_transformed_points(self, camera_position):
         points = scale_points(self.points, self.scale)
@@ -152,23 +166,22 @@ plane_points = [
     [-50,50,0]
 ]
 
-objects = [
-    GameObject(triangle_points, (0,0,1000), (45,0,0), (1,1,1), (155,155,155)),
-    GameObject(triangle_points, (100,0,1000), (0,45,0), (1,1,1), (155,155,155)),
-    GameObject(triangle_points, (200,0,1000), (0,0,45), (1,1,1), (155,155,155)),
+setup_objects = [
+    GameObject("plane", (0,0,1000), (45,0,0), (1,1,1), (155,155,155)),
+    GameObject("plane", (100,0,1000), (0,45,0), (1,1,1), (155,155,155)),
+    GameObject("plane", (200,0,1000), (0,0,45), (1,1,1), (155,155,155)),
 
-    GameObject(plane_points, (0,0,250), (0,0,0), (1,1,1), (155,0,0)),
-    GameObject(plane_points, (100,0,250), (0,0,0), (1,1,1), (0,155,0)),
-    GameObject(plane_points, (200,0,250), (0,0,0), (1,1,1), (0,0,155)),
-    GameObject(plane_points, (0,0,500), (0,0,0), (1,1,1), (65,50,0)),
-    GameObject(plane_points, (100,0,500), (0,0,0), (1,1,1), (50,175,80)),
-    GameObject(plane_points, (200,0,500), (0,0,0), (1,1,1), (0,100,200)),
-    GameObject(plane_points, (0,0,750), (0,0,0), (1,1,1), (155,155,155)),
-    GameObject(plane_points, (100,0,750), (0,0,0), (1,1,1), (155,155,155)),
-    GameObject(plane_points, (200,0,750), (0,0,0), (1,1,1), (155,155,155)),
+    GameObject("plane", (0,0,250), (0,0,0), (1,1,1), (155,0,0)),
+    GameObject("plane", (100,0,250), (0,0,0), (1,1,1), (0,155,0)),
+    GameObject("plane", (200,0,250), (0,0,0), (1,1,1), (0,0,155)),
+    GameObject("plane", (0,0,500), (0,0,0), (1,1,1), (65,50,0)),
+    GameObject("plane", (100,0,500), (0,0,0), (1,1,1), (50,175,80)),
+    GameObject("plane", (200,0,500), (0,0,0), (1,1,1), (0,100,200)),
+    GameObject("plane", (0,0,750), (0,0,0), (1,1,1), (155,155,155)),
+    GameObject("plane", (100,0,750), (0,0,0), (1,1,1), (155,155,155)),
+    GameObject("plane", (200,0,750), (0,0,0), (1,1,1), (155,155,155)),
 
-    GameObject(triangle_points, [0,0,-200], (-45,0,0), (5,5,5), (100,155,155)),
-    GameObject(triangle_points, [0,0,-200], (45,0,180), (5,5,5), (155,155,100))
+    GameObject("plane", [0,0,-200], (-45,0,0), (5,5,5), (100,155,155))
 ]
 
 player_camera = Camera([0,0,-200], [0,180,0], 10, 300)
@@ -178,8 +191,8 @@ def get_FPS():
     return fps
 
 def render_object(objectID):
-    color = objects[objectID].color
-    transformed_points = objects[objectID].get_transformed_points(player_camera.position)
+    color = render_objects[objectID].color
+    transformed_points = render_objects[objectID].get_transformed_points(player_camera.position)
 
     camera_points = player_camera.get_camera_points(transformed_points)
 
@@ -250,7 +263,7 @@ def on_step():
         True, (255, 255, 255)), (20, 80))
     
 def initialize():
-    for i in range(len(objects)):
+    for i in range(len(render_objects)):
         depth_buffer.append([i, 100])
         render_object(i)
 
